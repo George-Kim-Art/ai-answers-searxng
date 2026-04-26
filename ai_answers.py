@@ -740,7 +740,7 @@ class SXNGPlugin(Plugin):
             target_words = int(self.max_tokens * 0.4)
             lang_instruction = f" Respond in {lang}." if lang not in ('all', 'auto') else ""
 
-            SYSTEM = f"You are a direct, citation-accurate search synthesis engine and assistant. Today is {today}.{lang_instruction}"
+            SYSTEM = f"You are a direct, citation-accurate search synthesis engine. Today is {today}.{lang_instruction}"
             max_source_idx = 0
             if context_text:
                 indices = re.findall(r'\[(\d+)\]', context_text)
@@ -748,11 +748,12 @@ class SXNGPlugin(Plugin):
                     max_source_idx = max(map(int, indices))
 
             CORE_RULES = [
-                "Answer the question directly using ONLY the provided context.",
+                "Answer the question directly using the provided context.",
                 f"High density: Expert-briefing level.  Aim for ~{target_words} words.",
-                "CITATIONS: Cite format is [n] for facts from grounding sources or if using general knowledge, cite [*].",
+                "MUST CITE SOURCES by tailing a sentence with [n] or [n,n] etc. If citing general knowledge, use [*].",
                 "Do not use filler words, transitions, or meta-commentary.",
-                "Never explain your process. Just provide the facts.",
+                "Never explain your process. The user expects a direct response.",
+                "If sources and general knowledge are insufficient, respond with 'Insufficient information to answer.'"
             ]
 
             if q == "Continue":
@@ -772,19 +773,19 @@ class SXNGPlugin(Plugin):
             numbered_instructions = "\n".join(f"{i+1}. {r}" for i, r in enumerate(instructions))
             prompt = f"""<system>{SYSTEM}</system>
 
-<sources>
+<GROUNDING_SOURCES>
 {context_text or 'None.'}
-</sources>
+</GROUNDING_SOURCES>
 
-<history>
+<HISTORY>
 {prev_answer or 'None.'}
-</history>
+</HISTORY>
 
-<query>{q}</query>
+<USER_QUERY>{q}</USER_QUERY>
 
-<instructions>
+<CORE_DIRECTIVES>
 {numbered_instructions}
-</instructions>
+</CORE_DIRECTIVES>
 
 <answer>"""
 
