@@ -740,7 +740,7 @@ class SXNGPlugin(Plugin):
             target_words = int(self.max_tokens * 0.4)
             lang_instruction = f" Respond in {lang}." if lang not in ('all', 'auto') else ""
 
-            SYSTEM = f"You are a search synthesis engine. Direct, grounded, citation-accurate. Today is {today}.{lang_instruction}"
+            SYSTEM = f"You are a direct, citation-accurate search assistant. Today is {today}.{lang_instruction}"
             max_source_idx = 0
             if context_text:
                 indices = re.findall(r'\[(\d+)\]', context_text)
@@ -748,11 +748,11 @@ class SXNGPlugin(Plugin):
                     max_source_idx = max(map(int, indices))
 
             CORE_RULES = [
-                "DENSITY 4/5: Expert-briefing level. No filler, no transitions, every sentence = new information.",
-                f"BREVITY: Aim for ~{target_words} words. Be concise but comprehensive.",
-                "CITATIONS: Cite format is [n] for facts from grounding sources or [*] to fill in with general knowledge.",
-                "CONFLICTS: If sources contradict, state the conflict briefly.",
-                "NO HEDGE: Do not use phrases like 'Based on the sources' or 'It appears that'. State facts directly.",
+                "1. Answer the question directly using ONLY the provided context.",
+                f"2. High density (80%+): Expert-briefing level.  Aim for ~{target_words} words.",
+                "2. Cite facts using [1], [2], etc. If using general knowledge, cite [*].",
+                "3. Do not use filler words, transitions, or meta-commentary.",
+                "4. Never explain your process. Just provide the facts.",
             ]
 
             if q == "Continue":
@@ -1155,7 +1155,7 @@ class SXNGPlugin(Plugin):
                                     }}
 
                                     while (true) {{
-                                        const match = buffer.match(/(\\[\\d+(?:,\\s*\\d+)*\\])/);
+                                        const match = buffer.match(/(\[\d+(?:,\s*\d+)*\])/);
                                         
                                         if (!match) break;
                                         
