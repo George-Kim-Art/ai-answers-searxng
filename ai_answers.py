@@ -1036,7 +1036,7 @@ class SXNGPlugin(Plugin):
                 return Response("Missing API key or query", status=400)
             
             today = time.strftime("%Y-%m-%d")
-            target_words = int(self.max_tokens * 0.4)
+            target_words = int(self.max_tokens * 0.75 * 0.70)
             lang_instruction = f" Respond in {lang}." if lang not in ('all', 'auto') else ""
 
             base_sys = self.system_prompt if self.system_prompt else "You are a direct, citation-accurate search synthesis engine."
@@ -1183,7 +1183,7 @@ class SXNGPlugin(Plugin):
                         "model": self.model,
                         "messages": [{"role": "user", "content": prompt}],
                         "stream": True,
-                        "max_tokens": min(self.max_tokens * 4, 8192),
+                        "max_tokens": self.max_tokens,
                         "temperature": self.temperature
                     })
                     headers = {
