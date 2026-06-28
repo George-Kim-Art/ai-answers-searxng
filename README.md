@@ -1,110 +1,81 @@
-# AI Answers Plugin for SearXNG  
-**Single file install**  
-**Does not block result loading time**  
+# AI Answers for SearXNG
 
-A SearXNG plugin that generates AI answers using search results as RAG context. Supports 8+ LLM providers.
+This branch keeps the original AI Answers plugin behavior while adding optional, modular retrieval features.
 
-Features:
-- token-by-token UI streaming
-- clickable inline citations
-- interactive mode to continue summary, ask follow ups, copy, or regenerate
-- simple response mode with no extras
-- internally called low-latency RAG for follow ups (bypasses http loopback)
-- native network integration via `searx.network` (respects proxy/SSL settings)
-- stateless conversation persistence/sharability via URL
-- provider detection based on URL
+## Highlights
 
+- Optional semantic retrieval using OpenAI-compatible embedding APIs
+- Optional reranking using TEI, Jina, or Cohere-compatible rerank APIs
+- Optional dynamic model discovery for OpenAI-compatible model gateways
+- Modular helper files: `semantic_rank.py` and `model_resolver.py`
+- Backward compatible defaults: if no new environment variables are set, the plugin behaves like the original version
 
-## Installation
+## Architecture
 
-Place `ai_answers.py` into the `searx/plugins` directory of your instance (or mount it in a container) and enable it in `settings.yml`:
+```text
+User Query
+    │
+    ▼
+ai_answers.py
+    │
+    ├──────────────► model_resolver.py
+    │                    │
+    │                    ▼
+    │             Current LLM model
+    │
+    └──────────────► semantic_rank.py
+                         │
+                         ▼
+                  Embedding ranking
+                         │
+                         ▼
+                  Optional reranking
+                         │
+                         ▼
+                    Selected context
 
-```yaml
-plugins:
-  searx.plugins.ai_answers.SXNGPlugin:  
-    active: true
+Selected context + model
+    │
+    ▼
+Prompt builder
+    │
+    ▼
+LLM response
 ```
 
-## Configuration
+`ai_answers.py` remains the orchestration layer. Provider-specific retrieval and model-selection logic lives in helper modules so the main plugin remains easier to maintain.
 
-Configure via the environment variables:
+## Supported Embedding Providers
 
-### Required
+Any provider exposing an OpenAI-compatible embeddings endpoint should work.
 
-- `LLM_PROVIDER`: openrouter, openai, ollama, localai, lmstudio, gemini, azure, or huggingface
-- `LLM_KEY`: Provider API key (optional for local providers: ollama, localai, lmstudio)
+| Provider / Gateway | Support |
+| --- | --- |
+| OpenAI-compatible APIs | Supported |
+| vLLM | Supported through OpenAI-compatible API |
+| LiteLLM | Supported through OpenAI-compatible API |
+| OneAPI / NewAPI | Supported through OpenAI-compatible API |
+| Ollama-compatible gateways | Supported if embeddings endpoint is OpenAI-compatible |
+| SiliconFlow-style gateways | Supported if embeddings endpoint is OpenAI-compatible |
+| Jina embeddings | Supported if endpoint returns OpenAI-style embedding data |
 
-### Optional
+## Supported Rerank Providers
 
-- `LLM_MODEL`: Model identifier. Defaults vary. Recommended: 10-30B dense or 5-15B MoE activated.
-- `LLM_URL`: Overrides endpoint URL for any provider preset.
-- `LLM_SYSTEM_PROMPT`: Overrides some of the system prompt. Default `You are a direct, citation-accurate search synthesis engine.`.
-- `LLM_MAX_TOKENS`: Default `500`.
-- `LLM_TEMPERATURE`: Default `0.2`.
-- `LLM_CONTEXT_DEEP_COUNT`: results as context with full snippets. Default `5`.
-- `LLM_CONTEXT_SHALLOW_COUNT`: Results with headlines only (additional breadth). Default `15`.
-- `LLM_TABS`: Tab whitelist, comma delimiter. Default `general,science,it,news`.
-- `LLM_INTERACTIVE`: UI mode. Default is `true` (interactive: copy, regenerate, follow up). Set to `false` for simple response only mode.
-- `LLM_QUESTION_MARK_REQUIRED`: Only trigger AI answers when the query contains `?`. Default `false`.
-- `LLM_OLLAMA_UNLOAD_AFTER`: Unload Ollama model after each response. Default `false`.
+| Provider / API style | Support |
+| --- | --- |
+| TEI reranker | Supported |
+| Jina reranker | Supported |
+| Cohere-compatible rerank API | Supported |
 
-## How It Works
-1 user initial search 
-2 results return server side 
-3 `post_search` plugin hook entry
-4 token optimized context extracted 
-5 inject the ui/logic "shell" into standard results answer object 
-6 client side script calls custom endpoint with signed token
-7 LLM response streams back token by token
+## Documentation
 
-## Examples
+- [Installation](docs/INSTALL.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Configuration](docs/CONFIGURATION.md)
+- [Retrieval providers](docs/PROVIDERS.md)
+- [Upgrade guide](docs/UPGRADE.md)
+- [FAQ](docs/FAQ.md)
 
-### OpenRouter
-```
-LLM_PROVIDER=openrouter
-LLM_KEY=sk-or-xxx
-LLM_MODEL=google/gemma-3-27b-it:free
-```
+## Design Goal
 
-### Ollama (Local)
-```
-LLM_PROVIDER=ollama
-LLM_KEY=ollama
-LLM_MODEL=llama3.2
-```
-
-### LocalAI
-```
-LLM_PROVIDER=localai
-LLM_KEY=your-key
-LLM_MODEL=gpt-4
-LLM_URL=http://localai.lan:8080/v1/chat/completions
-```
-
-### Gemini
-```
-LLM_PROVIDER=gemini
-LLM_KEY=AIzaSy...
-LLM_MODEL=gemma-3-27b-it
-```
-
-### Azure
-```
-LLM_PROVIDER=azure
-LLM_KEY=your-api-key
-LLM_URL=https://your-resource.openai.azure.com/openai/deployments/your-deployment/chat/completions?api-version=2024-02-01
-```
-
-### Hugging Face
-```
-LLM_PROVIDER=huggingface
-LLM_KEY=hf_xxx
-LLM_MODEL=meta-llama/Meta-Llama-3-8B-Instruct
-```
-
-## Development
-
-```bash
-pip install flask flask-babel
-python tests/demo.py   # UI demo at localhost:5000
-```
+All new capabilities are opt-in. A user can install the plugin exactly as before and ignore semantic retrieval, reranking, and model discovery unless they explicitly configure them.
