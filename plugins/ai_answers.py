@@ -450,6 +450,7 @@ FRONTEND_JS_TEMPLATE = r"""
     const is_interactive = __IS_INTERACTIVE__;
     const q_init = __JS_Q__;
     const lang_init = __JS_LANG__;
+    const categories_init = __JS_CATEGORIES__;
     let urls = __JS_URLS__;
     const b64_init = __B64_CONTEXT__;
     const tk_init = __TK__;
@@ -746,7 +747,47 @@ FRONTEND_JS_TEMPLATE = r"""
         }
     }
 
-    if (!restored) startStream();
+    async function loadInitialRankedContext() {
+    try {
+        const auxRes = await fetch(script_root + '/ai-auxiliary-search', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                query: q_init,
+                lang: lang_init,
+                categories: categories_init,
+                offset: 0,
+                tk: tk_init
+            })
+        });
+        if (!auxRes.ok) throw new Error('auxiliary search HTTP ' + auxRes.status);
+        const auxData = await auxRes.json();
+        if (auxData.new_urls && Array.isArray(auxData.new_urls)) {
+            urls = auxData.new_urls;
+        }
+        if (auxData.context) return auxData.context;
+    } catch (err) {
+        console.warn('[AI Answers] ranked context unavailable; using initial context', err);
+    }
+    return null;
+}
+if (!restored) {
+    // 立即显示 AI 框和加载提示，不能等待辅助搜索完成
+    const initialBox = document.getElementById('sxng-stream-box');
+    if (initialBox) {
+        initialBox.style.display = 'block';
+        initialBox.style.visibility = 'visible';
+    }
+
+    const initialStatus = document.getElementById('sxng-stream-status');
+    if (initialStatus) {
+        initialStatus.style.display = 'inline';
+    }
+
+    // 后台准备排序后的上下文
+    const rankedContext = await loadInitialRankedContext();
+    await startStream(null, null, rankedContext);
+}
 })();
 """
 
@@ -755,6 +796,9 @@ if typing.TYPE_CHECKING:
     from searx.search import SearchWithPlugins
     from searx.extended_types import SXNG_Request
     from . import PluginCfg
+from .model_resolver import resolve_llm_model
+
+from .semantic_rank import semantic_rank
 
 class SXNGPlugin(Plugin):
     id = "ai_answers"
@@ -786,7 +830,7 @@ class SXNGPlugin(Plugin):
                 conn, path = _get_streaming_connection(unload_url)
                 conn.timeout = 2.0 
                 payload = json.dumps({
-                    "model": self.model,
+                    "model": resolve_llm_model(self.model, self.api_key),
                     "messages": [],
                     "keep_alive": 0
                 })
@@ -897,9 +941,15 @@ class SXNGPlugin(Plugin):
         
         self.system_prompt = os.getenv('LLM_SYSTEM_PROMPT', '').strip()
 
-    def _parse_aux_results(self, raw_results, raw_infoboxes, raw_answers):
+    def _parse_aux_results(self, raw_results, raw_infoboxes, raw_answers, query=''):
         results = []
-        limit = self.context_deep_count + self.context_shallow_count
+        normal_limit = self.context_deep_count + self.context_shallow_count
+        retrieval_enabled = os.getenv('EMBEDDING_ENABLED', 'false').lower().strip() in ('true', '1', 'yes', 'on') or os.getenv('RERANK_ENABLED', 'false').lower().strip() in ('true', '1', 'yes', 'on')
+        try:
+            retrieval_limit = max(1, int(os.getenv('RETRIEVAL_CANDIDATE_COUNT', '25')))
+        except ValueError:
+            retrieval_limit = 25
+        limit = max(normal_limit, retrieval_limit) if retrieval_enabled else normal_limit
         for r in raw_results[:limit]:
             # MainResult (attribute access) and LegacyResult (dict access)
             if hasattr(r, 'title'):
@@ -917,6 +967,10 @@ class SXNGPlugin(Plugin):
                     'url': r.get('url', ''),
                     'publishedDate': r.get('publishedDate', '')
                 })
+
+
+        if query and results:
+            results = semantic_rank(query, results)
 
         # SearXNG already merges infoboxes by ID, use first
         infoboxes = []
@@ -996,7 +1050,7 @@ class SXNGPlugin(Plugin):
                 raw_infoboxes = getattr(result_container, 'infoboxes', [])
                 raw_answers = getattr(result_container, 'answers', [])
                 
-                results, infoboxes, answers = self._parse_aux_results(raw_results, raw_infoboxes, raw_answers)
+                results, infoboxes, answers = self._parse_aux_results(raw_results, raw_infoboxes, raw_answers, query=query)
                 
                 context_str, new_urls = self._assemble_context(results, infoboxes, answers, offset)
 
@@ -1180,7 +1234,7 @@ class SXNGPlugin(Plugin):
                 try:
                     conn, path = _get_streaming_connection(self.endpoint_url)
                     payload = json.dumps({
-                        "model": self.model,
+                        "model": resolve_llm_model(self.model, self.api_key),
                         "messages": [{"role": "user", "content": prompt}],
                         "stream": True,
                         "max_tokens": self.max_tokens,
@@ -1376,12 +1430,21 @@ class SXNGPlugin(Plugin):
             raw_results = search.result_container.get_ordered_results()
             raw_infoboxes = getattr(search.result_container, 'infoboxes', [])
             raw_answers = getattr(search.result_container, 'answers', [])
-            
-            clean_results, infoboxes, answers = self._parse_aux_results(raw_results, raw_infoboxes, raw_answers)
-            context_str, _ = self._assemble_context(clean_results, infoboxes, answers)
+
+            q_clean = search.search_query.query.strip()
+
+            clean_results, infoboxes, answers = self._parse_aux_results(
+                raw_results,
+                raw_infoboxes,
+                raw_answers,
+            )
+            context_str, _ = self._assemble_context(
+                clean_results,
+                infoboxes,
+                answers,
+            )
 
             ts = str(int(time.time()))
-            q_clean = search.search_query.query.strip()
             lang = search.search_query.lang
             sig = hashlib.sha256(f"{ts}{self.secret}".encode()).hexdigest()
             tk = f"{ts}.{sig}"
@@ -1396,6 +1459,7 @@ class SXNGPlugin(Plugin):
             
             js_q = safe_json(q_clean)
             js_lang = safe_json(lang)
+            js_categories = safe_json(','.join(search.search_query.categories) or 'general')
             js_urls = safe_json(raw_urls)
             js_b64_context = safe_json(b64_context)
             js_tk = safe_json(tk)
@@ -1423,12 +1487,13 @@ class SXNGPlugin(Plugin):
                 .replace("__STREAM_BODY__", ', ' + stream_body if stream_body else '') \
                 .replace("__INTERACTIVE_JS_COMPLETE__", interactive_js_complete) \
                 .replace("__JS_LANG__", js_lang) \
+                .replace("__JS_CATEGORIES__", js_categories) \
                 .replace("__JS_URLS__", js_urls) \
                 .replace("__B64_CONTEXT__", js_b64_context) \
                 .replace("__JS_Q__", js_q)
 
             html_payload = f'''
-                <article id="sxng-stream-box" class="answer" style="display:none; margin: 1rem 0;">
+                <article id="sxng-stream-box" class="answer" style="display:block; margin: 1rem 0;">
                     <style>
                         @keyframes sxng-fade-pulse {{
                             0%, 100% {{ opacity: 0.1; }}
@@ -1463,9 +1528,46 @@ class SXNGPlugin(Plugin):
                         }}
                         {interactive_css}
                     </style>
-                    <p id="sxng-stream-data" style="white-space: pre-wrap; color: var(--color-result-description); font-size: 0.95rem; margin:0;"><span class="sxng-cursor"></span></p>
+                    <p id="sxng-stream-data" style="white-space: pre-wrap; color: var(--color-result-description); font-size: 0.95rem; margin:0;"><span id="sxng-stream-status">正在整理搜索结果并生成 AI 汇总…… </span><span class="sxng-cursor"></span></p>
                     {interactive_html}
                     <script>
+                    (() => {{
+                        const dataElement = document.getElementById('sxng-stream-data');
+                        const statusElement = document.getElementById('sxng-stream-status');
+
+                        if (!dataElement || !statusElement) return;
+
+                        const hasRealContent = () => {{
+                            return Array.from(dataElement.childNodes).some(node => {{
+                                if (node === statusElement) return false;
+
+                                if (
+                                    node.nodeType === Node.ELEMENT_NODE &&
+                                    node.classList &&
+                                    node.classList.contains('sxng-cursor')
+                                ) {{
+                                    return false;
+                                }}
+
+                                const nodeText = (node.textContent || '').trim();
+                                return nodeText.length > 0;
+                            }});
+                        }};
+
+                        const loadingObserver = new MutationObserver(() => {{
+                            if (!hasRealContent()) return;
+
+                            statusElement.remove();
+                            loadingObserver.disconnect();
+                        }});
+
+                        loadingObserver.observe(dataElement, {{
+                            childList: true,
+                            subtree: true,
+                            characterData: true
+                        }});
+                    }})();
+
                     {js_code}
                     </script>
                 </article>
