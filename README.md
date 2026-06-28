@@ -79,3 +79,14 @@ Any provider exposing an OpenAI-compatible embeddings endpoint should work.
 ## Design Goal
 
 All new capabilities are opt-in. A user can install the plugin exactly as before and ignore semantic retrieval, reranking, and model discovery unless they explicitly configure them.
+
+## Docker deployment
+
+A generic Docker Compose example is available in:
+
+- `examples/docker/docker-compose.yml`
+- `examples/docker/.env.example`
+- `docs/DOCKER.md`
+
+The example uses safe placeholders only. Copy `.env.example` to `.env`, fill in
+your own endpoints and keys, then start the stack with Docker Compose.

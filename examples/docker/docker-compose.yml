@@ -1,0 +1,108 @@
+# Example Docker Compose deployment for AI Answers + SearXNG.
+#
+# This file is intentionally generic. Replace values in .env.example and
+# copy it to .env before starting the stack.
+#
+# Usage:
+#   cp examples/docker/.env.example .env
+#   docker compose -f examples/docker/docker-compose.yml --env-file .env up -d
+
+networks:
+  searxng-ai-net:
+    driver: bridge
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: searxng-redis
+    restart: unless-stopped
+    networks:
+      - searxng-ai-net
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    ports:
+      - "${SEARXNG_PORT:-18080}:8080"
+    env_file:
+      - ../../.env
+    environment:
+      SEARXNG_BASE_URL: "${SEARXNG_BASE_URL:-http://localhost:18080/}"
+      SEARXNG_UWSGI_PROCESSES: "${SEARXNG_UWSGI_PROCESSES:-4}"
+      SEARXNG_UWSGI_THREADS: "${SEARXNG_UWSGI_THREADS:-4}"
+
+      # Core LLM settings
+      LLM_PROVIDER: "${LLM_PROVIDER:-openai}"
+      LLM_KEY: "${LLM_KEY:-}"
+      LLM_MODEL: "${LLM_MODEL:-}"
+      LLM_URL: "${LLM_URL:-}"
+      LLM_MAX_TOKENS: "${LLM_MAX_TOKENS:-800}"
+      LLM_TEMPERATURE: "${LLM_TEMPERATURE:-0.2}"
+      LLM_CONTEXT_DEEP_COUNT: "${LLM_CONTEXT_DEEP_COUNT:-5}"
+      LLM_CONTEXT_SHALLOW_COUNT: "${LLM_CONTEXT_SHALLOW_COUNT:-15}"
+      LLM_TABS: "${LLM_TABS:-general,science,it,news}"
+      LLM_INTERACTIVE: "${LLM_INTERACTIVE:-true}"
+      LLM_QUESTION_MARK_REQUIRED: "${LLM_QUESTION_MARK_REQUIRED:-false}"
+
+      # Dynamic model resolver
+      LLM_MODEL_MODE: "${LLM_MODEL_MODE:-fixed}"
+      LLM_MODEL_FALLBACK: "${LLM_MODEL_FALLBACK:-}"
+      LLM_SWITCH_STATUS_URL: "${LLM_SWITCH_STATUS_URL:-}"
+      LLM_MODELS_URL: "${LLM_MODELS_URL:-}"
+      LLM_MODEL_CACHE_SECONDS: "${LLM_MODEL_CACHE_SECONDS:-60}"
+      LLM_MODEL_DISCOVERY_TIMEOUT: "${LLM_MODEL_DISCOVERY_TIMEOUT:-5}"
+      LLM_MODEL_API_KEY: "${LLM_MODEL_API_KEY:-}"
+      LLM_MODEL_API_KEY_HEADER: "${LLM_MODEL_API_KEY_HEADER:-Authorization}"
+      LLM_MODEL_API_KEY_SCHEME: "${LLM_MODEL_API_KEY_SCHEME:-Bearer}"
+      LLM_MODEL_VERIFY_SSL: "${LLM_MODEL_VERIFY_SSL:-true}"
+
+      # Semantic retrieval
+      EMBEDDING_ENABLED: "${EMBEDDING_ENABLED:-false}"
+      EMBEDDING_URL: "${EMBEDDING_URL:-}"
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-}"
+      EMBEDDING_API_FORMAT: "${EMBEDDING_API_FORMAT:-openai}"
+      EMBEDDING_API_KEY: "${EMBEDDING_API_KEY:-}"
+      EMBEDDING_API_KEY_HEADER: "${EMBEDDING_API_KEY_HEADER:-Authorization}"
+      EMBEDDING_API_KEY_SCHEME: "${EMBEDDING_API_KEY_SCHEME:-Bearer}"
+      EMBEDDING_TOP_K: "${EMBEDDING_TOP_K:-15}"
+
+      # Optional reranker
+      RERANK_ENABLED: "${RERANK_ENABLED:-false}"
+      RERANK_URL: "${RERANK_URL:-}"
+      RERANK_MODEL: "${RERANK_MODEL:-}"
+      RERANK_API_FORMAT: "${RERANK_API_FORMAT:-tei}"
+      RERANK_API_KEY: "${RERANK_API_KEY:-}"
+      RERANK_API_KEY_HEADER: "${RERANK_API_KEY_HEADER:-Authorization}"
+      RERANK_API_KEY_SCHEME: "${RERANK_API_KEY_SCHEME:-Bearer}"
+      RERANK_TOP_K: "${RERANK_TOP_K:-8}"
+
+      # Retrieval tuning
+      RETRIEVAL_CANDIDATE_COUNT: "${RETRIEVAL_CANDIDATE_COUNT:-25}"
+      RETRIEVAL_DOCUMENT_MAX_CHARS: "${RETRIEVAL_DOCUMENT_MAX_CHARS:-3000}"
+      RETRIEVAL_TIMEOUT: "${RETRIEVAL_TIMEOUT:-10}"
+      RETRIEVAL_VERIFY_SSL: "${RETRIEVAL_VERIFY_SSL:-true}"
+    volumes:
+      # SearXNG configuration directory. Provide your own settings.yml here.
+      - ../../searxng:/etc/searxng:rw
+
+      # Plugin modules. These must be mounted together because ai_answers.py
+      # imports semantic_rank.py and model_resolver.py.
+      - ../../plugins/ai_answers.py:/usr/local/searxng/searx/plugins/ai_answers.py:ro
+      - ../../plugins/semantic_rank.py:/usr/local/searxng/searx/plugins/semantic_rank.py:ro
+      - ../../plugins/model_resolver.py:/usr/local/searxng/searx/plugins/model_resolver.py:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - searxng-ai-net
+
+volumes:
+  redis-data:
