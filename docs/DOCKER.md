@@ -1,148 +1,219 @@
-# Docker Deployment
+# Docker Deployment Guide
 
-This document provides a reference Docker Compose deployment for SearXNG with the
-AI Answers plugin and its optional retrieval modules.
+This document explains how to run AI Answers with SearXNG using Docker Compose.
 
-The example is intentionally generic. It does not contain real API keys, private
-IP addresses, internal domains, or personal deployment details.
+The examples are intentionally generic. They do not contain real API keys, private IP addresses, hostnames, model names or personal configuration.
 
-## File layout
+## 1. Choose a Template
 
-A typical checkout should look like this:
+The `examples/` directory contains several templates:
 
 ```text
-.
-├── plugins/
-│   ├── ai_answers.py
-│   ├── semantic_rank.py
-│   └── model_resolver.py
-├── searxng/
-│   └── settings.yml
-├── examples/
-│   └── docker/
-│       ├── docker-compose.yml
-│       └── .env.example
-└── .env
+examples/
+├── docker/      # Generic OpenAI-compatible deployment
+├── openai/      # OpenAI hosted API
+├── ollama/      # Local Ollama OpenAI-compatible endpoint
+├── oneapi/      # OneAPI / NewAPI gateway
+├── litellm/     # LiteLLM gateway
+└── vllm/        # vLLM OpenAI-compatible server
 ```
 
-## Quick start
-
-Copy the example environment file:
+If you are not sure which one to use, start with:
 
 ```bash
-cp examples/docker/.env.example .env
+cd examples/docker
 ```
 
-Edit `.env` and configure at least:
+## 2. Create `.env`
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set at least:
 
 ```env
-LLM_KEY=replace-with-your-api-key
-LLM_URL=https://api.example.com/v1/chat/completions
-LLM_MODEL=example-chat-model
+LLM_URL=https://api.openai.com/v1/chat/completions
+LLM_KEY=your_api_key
+LLM_MODEL=gpt-4o-mini
 ```
 
-Start SearXNG:
+For local gateways, replace `LLM_URL` with the gateway chat completions endpoint.
+
+Examples:
+
+```env
+# OpenAI
+LLM_URL=https://api.openai.com/v1/chat/completions
+
+# Ollama OpenAI-compatible endpoint
+LLM_URL=http://host.docker.internal:11434/v1/chat/completions
+
+# vLLM
+LLM_URL=http://host.docker.internal:8000/v1/chat/completions
+
+# OneAPI / NewAPI / LiteLLM
+LLM_URL=http://host.docker.internal:3000/v1/chat/completions
+```
+
+## 3. Start SearXNG
 
 ```bash
-docker compose -f examples/docker/docker-compose.yml --env-file .env up -d
+docker compose up -d
+```
+
+Check logs:
+
+```bash
+docker compose logs -f searxng
 ```
 
 Open:
 
 ```text
-http://localhost:18080/
+http://localhost:8080
 ```
 
-## Minimal mode
+## 4. Plugin Files Mounted by Docker
 
-Minimal mode keeps the original behavior and disables semantic retrieval:
+The examples mount the plugin files into the SearXNG container:
 
-```env
-LLM_MODEL_MODE=fixed
-EMBEDDING_ENABLED=false
-RERANK_ENABLED=false
+```yaml
+volumes:
+  - ../../plugins/ai_answers.py:/etc/searxng/plugins/ai_answers.py:ro
+  - ../../plugins/semantic_rank.py:/etc/searxng/plugins/semantic_rank.py:ro
+  - ../../plugins/model_resolver.py:/etc/searxng/plugins/model_resolver.py:ro
 ```
 
-This is the recommended first test.
+If your SearXNG image uses a different plugin path, adjust the mount path.
 
-## Embedding mode
+## 5. Environment Variables
 
-Enable semantic retrieval after the base plugin works:
+All examples load variables through:
+
+```yaml
+env_file:
+  - .env
+```
+
+Keep real `.env` files out of Git. Only commit `.env.example`.
+
+## 6. Enabling Semantic Retrieval
+
+Semantic retrieval is disabled by default.
+
+Enable it:
 
 ```env
 EMBEDDING_ENABLED=true
-EMBEDDING_URL=https://api.example.com/v1/embeddings
-EMBEDDING_MODEL=example-embedding-model
-EMBEDDING_API_FORMAT=openai
-EMBEDDING_API_KEY=replace-with-your-api-key
+EMBEDDING_URL=http://host.docker.internal:8081/v1/embeddings
+EMBEDDING_MODEL=text-embedding-3-small
 ```
 
-Any provider exposing an OpenAI-compatible embeddings endpoint can be used.
+The endpoint should accept an OpenAI-compatible embeddings payload:
 
-## Rerank mode
+```json
+{
+  "model": "text-embedding-3-small",
+  "input": ["text 1", "text 2"]
+}
+```
 
-Enable reranking after embedding retrieval works:
+## 7. Enabling Rerank
+
+Rerank is disabled by default.
+
+TEI-style example:
 
 ```env
 RERANK_ENABLED=true
-RERANK_URL=https://api.example.com/v1/rerank
-RERANK_MODEL=example-rerank-model
+RERANK_API_FORMAT=tei
+RERANK_URL=http://host.docker.internal:8082/rerank
+RERANK_MODEL=BAAI/bge-reranker-v2-m3
+```
+
+Jina example:
+
+```env
+RERANK_ENABLED=true
+RERANK_API_FORMAT=jina
+RERANK_URL=https://api.jina.ai/v1/rerank
+RERANK_MODEL=jina-reranker-v2-base-multilingual
+RERANK_API_KEY=your_jina_key
+```
+
+Cohere-compatible example:
+
+```env
+RERANK_ENABLED=true
 RERANK_API_FORMAT=cohere
-RERANK_API_KEY=replace-with-your-api-key
+RERANK_URL=https://api.cohere.com/v1/rerank
+RERANK_MODEL=rerank-multilingual-v3.0
+RERANK_API_KEY=your_cohere_key
 ```
 
-Supported rerank API formats include:
+## 8. Docker Networking Notes
 
-- `tei`
-- `jina`
-- `cohere`
+From inside a Docker container, `localhost` means the container itself.
 
-Services exposing Cohere-compatible rerank endpoints can usually use
-`RERANK_API_FORMAT=cohere`.
+Use one of these instead:
 
-## Dynamic model resolver
+- `host.docker.internal` for Docker Desktop and many modern Docker setups
+- the Docker Compose service name if the model service is in the same compose file
+- the host machine LAN IP for Linux setups where `host.docker.internal` is not available
 
-Fixed mode is the default:
-
-```env
-LLM_MODEL_MODE=fixed
-LLM_MODEL=example-chat-model
-```
-
-Auto mode can be used with model-switching gateways or OpenAI-compatible model
-list endpoints:
-
-```env
-LLM_MODEL_MODE=auto
-LLM_MODEL_FALLBACK=example-chat-model
-LLM_MODELS_URL=https://api.example.com/v1/models
-```
-
-If discovery fails, the plugin falls back to `LLM_MODEL_FALLBACK` or `LLM_MODEL`.
-
-## Mounted files
-
-The Docker Compose example mounts the plugin modules directly into the SearXNG
-container:
+For Linux, the examples include:
 
 ```yaml
-- ../../plugins/ai_answers.py:/usr/local/searxng/searx/plugins/ai_answers.py:ro
-- ../../plugins/semantic_rank.py:/usr/local/searxng/searx/plugins/semantic_rank.py:ro
-- ../../plugins/model_resolver.py:/usr/local/searxng/searx/plugins/model_resolver.py:ro
+extra_hosts:
+  - "host.docker.internal:host-gateway"
 ```
 
-All three files are required because `ai_answers.py` imports the helper modules.
+## 9. Troubleshooting
 
-## Security notes
+### The plugin cannot reach the model server
 
-Do not commit:
+Check the endpoint from inside the container:
 
-- `.env`
-- real API keys
-- private IP addresses
-- internal domains
-- personal paths
-- backup files
-- logs
+```bash
+docker compose exec searxng sh
+wget -qO- http://host.docker.internal:8000/v1/models
+```
 
-Only commit `.env.example` with safe placeholder values.
+### Embedding is enabled but results look unchanged
+
+Check:
+
+```env
+EMBEDDING_ENABLED=true
+EMBEDDING_URL=...
+EMBEDDING_MODEL=...
+```
+
+Also check logs for:
+
+```text
+AI Answers retrieval
+```
+
+### Rerank fails silently
+
+The plugin is designed to fail open. If rerank fails, it falls back to the existing ranking instead of breaking search.
+
+Check:
+
+```env
+RERANK_API_FORMAT=tei|jina|cohere
+RERANK_URL=...
+RERANK_MODEL=...
+```
+
+### Do not commit secrets
+
+Before opening a PR, verify:
+
+```bash
+git status --ignored
+```
+
+Make sure `.env` is ignored and only `.env.example` is committed.

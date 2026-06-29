@@ -1,33 +1,134 @@
 # FAQ
 
-## Does this change the default behavior?
-
-No. Semantic retrieval, reranking, and dynamic model discovery are disabled unless explicitly configured.
-
 ## Do I need embeddings?
 
-No. Embeddings are optional. Without embeddings, the plugin uses the normal SearXNG result order.
+No. Embeddings are optional.
 
-## Do I need a reranker?
+Set:
 
-No. Reranking is optional. It is most useful when search results contain many similar or noisy documents.
+```env
+EMBEDDING_ENABLED=false
+```
 
-## Can I use local models?
+## Do I need rerank?
 
-Yes, if your local gateway exposes OpenAI-compatible chat, embeddings, or model-list endpoints.
+No. Rerank is optional.
 
-## What is the difference between embedding and reranking?
+Set:
 
-Embedding ranking compares the query and documents in vector space to find semantically related results. Reranking then reorders the selected candidates with a model optimized for relevance scoring.
+```env
+RERANK_ENABLED=false
+```
 
-## What happens if the embedding or rerank API fails?
+## What is the safest default setup?
 
-The plugin logs the failure and falls back to the original result order.
+Use fixed model mode and disable retrieval:
 
-## What happens if dynamic model discovery fails?
+```env
+LLM_MODEL_MODE=fixed
+EMBEDDING_ENABLED=false
+RERANK_ENABLED=false
+```
 
-The plugin falls back to `LLM_MODEL_FALLBACK` or `LLM_MODEL`.
+## What does semantic retrieval improve?
 
-## Are API keys required?
+It helps the prompt builder select search results that are semantically closer to the user query, instead of relying only on the original search order.
 
-Only if the selected provider requires them. Local endpoints may not require keys.
+This can improve answer quality when search results contain mixed or noisy content.
+
+## What does rerank improve?
+
+A reranker compares the query and candidate documents directly and can produce a better final ordering than embeddings alone.
+
+A common pipeline is:
+
+```text
+Search results → embeddings → top candidates → reranker → prompt
+```
+
+## Why does the plugin fail open?
+
+Search should not break just because an optional retrieval service is unavailable.
+
+If embedding or rerank fails, the plugin falls back to the original ranking.
+
+## Can I use Ollama?
+
+Yes, if you use Ollama's OpenAI-compatible endpoint.
+
+Example:
+
+```env
+LLM_URL=http://host.docker.internal:11434/v1/chat/completions
+LLM_MODEL=llama3.1
+LLM_KEY=
+```
+
+## Can I use OneAPI, NewAPI or LiteLLM?
+
+Yes. Use their OpenAI-compatible endpoint.
+
+Example:
+
+```env
+LLM_URL=http://host.docker.internal:3000/v1/chat/completions
+LLM_KEY=your_gateway_key
+```
+
+## Can I use a local embedding model?
+
+Yes, if it exposes an OpenAI-compatible embeddings endpoint.
+
+```env
+EMBEDDING_ENABLED=true
+EMBEDDING_URL=http://host.docker.internal:8001/v1/embeddings
+EMBEDDING_MODEL=your_embedding_model
+```
+
+## Why is `localhost` not working in Docker?
+
+Inside the SearXNG container, `localhost` means the SearXNG container itself.
+
+Use:
+
+```text
+host.docker.internal
+```
+
+or the Docker Compose service name.
+
+## Should I commit `.env`?
+
+No.
+
+Commit only `.env.example`.
+
+## Why are there multiple example directories?
+
+Different users run different model backends.
+
+The examples provide safe starting points for:
+
+- OpenAI
+- Ollama
+- OneAPI / NewAPI
+- LiteLLM
+- vLLM
+- generic OpenAI-compatible deployments
+
+## How should I add a new backend template?
+
+Create:
+
+```text
+examples/provider-name/
+├── docker-compose.yml
+├── .env.example
+└── settings.yml.example
+```
+
+Then update:
+
+- `README.md`
+- `docs/DOCKER.md`
+- `docs/PROVIDERS.md`

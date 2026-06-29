@@ -1,0 +1,18 @@
+# Minimal SearXNG settings example for Docker testing.
+# Merge these settings into your own SearXNG settings.yml if you already have one.
+
+use_default_settings: true
+
+server:
+  bind_address: "0.0.0.0"
+  port: 8080
+  secret_key: "replace-this-with-a-random-secret"
+
+# Plugin names may differ depending on the upstream plugin registration name.
+# If your SearXNG build requires explicit plugin activation, enable AI Answers here.
+enabled_plugins:
+  - ai_answers
+
+search:
+  safe_search: 0
+  autocomplete: ""

@@ -1,36 +1,54 @@
 ## Summary
 
-This PR adds optional semantic retrieval, optional reranking, and dynamic model discovery to AI Answers while preserving the existing behavior by default.
+This PR adds optional, modular enhancements to AI Answers while preserving the existing behavior by default.
 
 ## What changed
 
-- Added `semantic_rank.py` for embedding-based context selection and optional reranking
-- Added `model_resolver.py` for fixed or auto model resolution
-- Updated `ai_answers.py` to use the helper modules when configured
-- Added documentation for installation, architecture, configuration, retrieval providers, upgrade, and FAQ
+- Added `semantic_rank.py` for optional embedding retrieval and reranking.
+- Added `model_resolver.py` for fixed or automatic model selection.
+- Kept `ai_answers.py` as the main orchestration layer.
+- Added detailed documentation for installation, Docker, configuration, providers, architecture, upgrades and maintenance.
+- Added safe Docker examples for multiple OpenAI-compatible backends.
 
 ## Design goals
 
-- Keep the original plugin behavior unchanged unless new options are enabled
-- Keep provider-specific retrieval logic outside the main plugin file
-- Support OpenAI-compatible embedding providers and common rerank API styles
-- Make the architecture easier to understand and extend
+- Preserve backward compatibility.
+- Keep new features opt-in.
+- Avoid provider-specific SDK dependencies.
+- Support OpenAI-compatible LLM and embedding APIs.
+- Keep optional retrieval failures from breaking normal search.
+- Make the architecture easier for future contributors to modify.
 
-## Supported retrieval APIs
+## Default behavior
 
-Embedding:
+With default configuration:
 
-- OpenAI-compatible embeddings API
-- Gateways such as vLLM, LiteLLM, OneAPI/NewAPI, and similar services when they expose compatible embeddings endpoints
+```env
+LLM_MODEL_MODE=fixed
+EMBEDDING_ENABLED=false
+RERANK_ENABLED=false
+```
 
-Rerank:
+The plugin uses the configured fixed model and does not call embedding or rerank endpoints.
 
-- TEI style
-- Jina style
-- Cohere-compatible style
+## Documentation added
 
-## Compatibility
+- `docs/INSTALL.md`
+- `docs/DOCKER.md`
+- `docs/CONFIGURATION.md`
+- `docs/PROVIDERS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/UPGRADE.md`
+- `docs/DEVELOPMENT.md`
+- `docs/FAQ.md`
 
-All new features are opt-in.
+## Docker examples added
 
-If users do not set `EMBEDDING_ENABLED`, `RERANK_ENABLED`, or `LLM_MODEL_MODE=auto`, the plugin should continue to behave like the original implementation.
+- `examples/docker`
+- `examples/openai`
+- `examples/ollama`
+- `examples/oneapi`
+- `examples/litellm`
+- `examples/vllm`
+
+All examples use placeholders only and do not include private configuration.

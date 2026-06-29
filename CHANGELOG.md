@@ -4,18 +4,23 @@
 
 ### Added
 
-- Optional semantic retrieval pipeline
-- Optional rerank pipeline
-- Dynamic model resolver
-- Modular helper files for retrieval and model discovery
-- Documentation for installation, architecture, configuration, providers, upgrade, and FAQ
-
-### Changed
-
-- Context selection can now use optional embedding and rerank stages when enabled.
-- Model selection can now use fixed mode or automatic model discovery.
+- Modular semantic retrieval helper: `plugins/semantic_rank.py`.
+- Modular model resolver helper: `plugins/model_resolver.py`.
+- Optional embedding-based ranking.
+- Optional reranker support.
+- Fixed and automatic model selection modes.
+- Docker deployment examples for generic, OpenAI, Ollama, OneAPI/NewAPI, LiteLLM and vLLM deployments.
+- Detailed documentation for installation, Docker deployment, configuration, providers, architecture, upgrade and maintenance.
 
 ### Compatibility
 
-- Existing behavior is preserved by default.
-- New features are disabled unless configured through environment variables.
+- Default behavior remains fixed-model mode.
+- Embedding retrieval is disabled unless `EMBEDDING_ENABLED=true`.
+- Rerank is disabled unless `RERANK_ENABLED=true`.
+- Model auto-discovery is disabled unless `LLM_MODEL_MODE=auto`.
+
+### Security
+
+- Real `.env` files are ignored.
+- Example files use placeholders only.
+- Local deployment details, private URLs and API keys are not included.

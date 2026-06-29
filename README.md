@@ -1,14 +1,119 @@
 # AI Answers for SearXNG
 
-This branch keeps the original AI Answers plugin behavior while adding optional, modular retrieval features.
+AI Answers adds LLM-powered answers to SearXNG search results.
 
-## Highlights
+This version keeps the original plugin behavior and adds optional modular extensions:
 
-- Optional semantic retrieval using OpenAI-compatible embedding APIs
-- Optional reranking using TEI, Jina, or Cohere-compatible rerank APIs
-- Optional dynamic model discovery for OpenAI-compatible model gateways
-- Modular helper files: `semantic_rank.py` and `model_resolver.py`
-- Backward compatible defaults: if no new environment variables are set, the plugin behaves like the original version
+- OpenAI-compatible LLM backends
+- Optional semantic retrieval with embeddings
+- Optional reranking
+- Dynamic model discovery
+- Modular provider-neutral helper files
+- Docker deployment examples
+
+All new retrieval and model-discovery features are opt-in. If no new environment variables are configured, the plugin works like the original fixed-model setup.
+
+## Project Layout
+
+```text
+plugins/
+├── ai_answers.py          # Main SearXNG plugin entrypoint
+├── semantic_rank.py       # Embedding + rerank retrieval helper
+├── model_resolver.py      # Fixed / auto model resolver
+└── __init__.py
+
+docs/
+├── INSTALL.md             # Manual installation
+├── DOCKER.md              # Docker one-click deployment guide
+├── CONFIGURATION.md       # Full environment variable reference
+├── PROVIDERS.md           # Supported LLM, embedding and rerank providers
+├── ARCHITECTURE.md        # Runtime architecture and extension points
+├── UPGRADE.md             # Upgrade and migration guide
+├── DEVELOPMENT.md         # Notes for future maintainers
+└── FAQ.md
+
+examples/
+├── docker/                # Generic Docker template
+├── openai/                # OpenAI hosted API template
+├── ollama/                # Local Ollama / OpenAI-compatible gateway template
+├── oneapi/                # OneAPI / NewAPI template
+├── litellm/               # LiteLLM gateway template
+└── vllm/                  # vLLM OpenAI-compatible server template
+```
+
+## Quick Start with Docker
+
+```bash
+cd examples/docker
+cp .env.example .env
+# edit .env and set your LLM endpoint and API key
+
+docker compose up -d
+```
+
+Open SearXNG and enable/use the AI Answers plugin according to your SearXNG configuration.
+
+See [docs/DOCKER.md](docs/DOCKER.md) for the full Docker guide.
+
+## Manual Installation
+
+Copy the plugin files into your SearXNG plugin directory:
+
+```text
+plugins/
+├── ai_answers.py
+├── semantic_rank.py
+└── model_resolver.py
+```
+
+Then enable the plugin in your SearXNG settings.
+
+See [docs/INSTALL.md](docs/INSTALL.md).
+
+## Supported Backends
+
+The plugin is designed around OpenAI-compatible APIs.
+
+Common LLM backends:
+
+- OpenAI
+- Ollama OpenAI-compatible API
+- vLLM
+- LiteLLM
+- OneAPI
+- NewAPI
+- SiliconFlow
+- Local OpenAI-compatible gateways
+
+Embedding backends:
+
+- OpenAI-compatible embeddings API
+- Ollama embeddings through a compatible gateway
+- vLLM / TEI / LiteLLM / OneAPI / NewAPI style endpoints where compatible
+
+Rerank backends:
+
+- TEI rerank endpoint
+- Jina AI rerank API
+- Cohere-compatible rerank API
+
+See [docs/PROVIDERS.md](docs/PROVIDERS.md).
+
+## Configuration
+
+The most important variables are:
+
+```env
+LLM_PROVIDER=openai
+LLM_URL=https://api.openai.com/v1/chat/completions
+LLM_KEY=your_api_key
+LLM_MODEL=gpt-4o-mini
+
+EMBEDDING_ENABLED=false
+RERANK_ENABLED=false
+```
+
+Full reference: [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 ## Architecture
 
@@ -21,72 +126,28 @@ ai_answers.py
     ├──────────────► model_resolver.py
     │                    │
     │                    ▼
-    │             Current LLM model
+    │              selected LLM model
     │
-    └──────────────► semantic_rank.py
-                         │
-                         ▼
-                  Embedding ranking
-                         │
-                         ▼
-                  Optional reranking
-                         │
-                         ▼
-                    Selected context
-
-Selected context + model
+    ├──────────────► semantic_rank.py
+    │                    │
+    │                    ├─ optional embedding ranking
+    │                    └─ optional reranking
     │
     ▼
-Prompt builder
+Prompt Builder
     │
     ▼
-LLM response
+LLM Response
 ```
 
-`ai_answers.py` remains the orchestration layer. Provider-specific retrieval and model-selection logic lives in helper modules so the main plugin remains easier to maintain.
+Full architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Supported Embedding Providers
+## Contributing / PR Notes
 
-Any provider exposing an OpenAI-compatible embeddings endpoint should work.
+For upstream review, keep changes modular:
 
-| Provider / Gateway | Support |
-| --- | --- |
-| OpenAI-compatible APIs | Supported |
-| vLLM | Supported through OpenAI-compatible API |
-| LiteLLM | Supported through OpenAI-compatible API |
-| OneAPI / NewAPI | Supported through OpenAI-compatible API |
-| Ollama-compatible gateways | Supported if embeddings endpoint is OpenAI-compatible |
-| SiliconFlow-style gateways | Supported if embeddings endpoint is OpenAI-compatible |
-| Jina embeddings | Supported if endpoint returns OpenAI-style embedding data |
+1. Documentation and Docker examples
+2. Dynamic model resolver
+3. Semantic retrieval and rerank pipeline
 
-## Supported Rerank Providers
-
-| Provider / API style | Support |
-| --- | --- |
-| TEI reranker | Supported |
-| Jina reranker | Supported |
-| Cohere-compatible rerank API | Supported |
-
-## Documentation
-
-- [Installation](docs/INSTALL.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Configuration](docs/CONFIGURATION.md)
-- [Retrieval providers](docs/PROVIDERS.md)
-- [Upgrade guide](docs/UPGRADE.md)
-- [FAQ](docs/FAQ.md)
-
-## Design Goal
-
-All new capabilities are opt-in. A user can install the plugin exactly as before and ignore semantic retrieval, reranking, and model discovery unless they explicitly configure them.
-
-## Docker deployment
-
-A generic Docker Compose example is available in:
-
-- `examples/docker/docker-compose.yml`
-- `examples/docker/.env.example`
-- `docs/DOCKER.md`
-
-The example uses safe placeholders only. Copy `.env.example` to `.env`, fill in
-your own endpoints and keys, then start the stack with Docker Compose.
+See [PR_SPLIT_PLAN.md](PR_SPLIT_PLAN.md).

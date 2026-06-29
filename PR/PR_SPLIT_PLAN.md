@@ -1,53 +1,54 @@
 # Suggested PR Split
 
-For easier review, this change can be submitted as separate PRs.
+This change can be submitted as one PR, but it will be easier to review if split into smaller PRs.
 
-## PR 1: Documentation and architecture
+## PR 1: Documentation and Docker Examples
 
-Files:
+Include:
 
-```text
-README.md
-docs/INSTALL.md
-docs/ARCHITECTURE.md
-docs/CONFIGURATION.md
-docs/PROVIDERS.md
-docs/UPGRADE.md
-docs/FAQ.md
-CHANGELOG.md
-```
+- `README.md`
+- `docs/*`
+- `examples/*`
+- `.gitignore`
+- `CHANGELOG.md`
 
-Goal:
+Purpose:
 
-- Explain the proposed modular architecture
-- Document configuration and provider compatibility
-- Ask for maintainer feedback before merging larger code changes
+- Explain the architecture.
+- Document supported providers.
+- Add safe deployment templates.
+- Let maintainers review the direction before reviewing code.
 
-## PR 2: Dynamic model resolver
+## PR 2: Dynamic Model Resolver
 
-Files:
+Include:
 
-```text
-plugins/model_resolver.py
-plugins/ai_answers.py
-```
+- `plugins/model_resolver.py`
+- minimal integration in `plugins/ai_answers.py`
+- relevant docs updates
 
-Goal:
+Purpose:
 
-- Add optional fixed/auto model resolution
-- Keep fixed model mode as the default
+- Add fixed/auto model mode.
+- Support OpenAI-compatible `/v1/models` discovery.
+- Keep fallback behavior safe.
 
-## PR 3: Semantic retrieval and reranking
+## PR 3: Semantic Retrieval and Rerank
 
-Files:
+Include:
 
-```text
-plugins/semantic_rank.py
-plugins/ai_answers.py
-```
+- `plugins/semantic_rank.py`
+- retrieval integration in `plugins/ai_answers.py`
+- configuration docs updates
 
-Goal:
+Purpose:
 
-- Add optional embedding ranking
-- Add optional reranking
-- Preserve original search result order when disabled
+- Add optional embedding ranking.
+- Add optional rerank support.
+- Preserve fail-open behavior.
+
+## Why split?
+
+- Smaller diffs are easier to review.
+- Maintainers can discuss the architecture early.
+- Optional features can be accepted independently.
